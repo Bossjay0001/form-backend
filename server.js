@@ -3,68 +3,127 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const axios = require('axios');
+const { Pool } = require('pg');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-// Helper function to SHA-256 hash personal identifiers required by Meta
+app.use(helmet());
+app.use(express.json({ limit: '10kb' }));
+
+const corsOptions = {
+  origin: process.env.ALLOWED_ORIGIN || '*',
+  methods: ['POST', 'GET']
+};
+app.use(cors(corsOptions));
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { success: false, message: 'Too many submissions. Please try again later.' }
+});
+app.use('/submit-form', limiter);
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
 function hashData(data) {
   if (!data) return null;
-  return crypto.createHash('sha256').update(data.trim().toLowerCase()).digest('hex');
+  const cleanData = data.toString().trim().toLowerCase();
+  return crypto.createHash('sha256').update(cleanData).digest('hex');
+}
+
+function formatPhone(phone) {
+  if (!phone) return null;
+  const cleaned = phone.replace(/\D/g, '');
+  return cleaned ? cleaned : null;
 }
 
 app.post('/submit-form', async (req, res) => {
-  const { name, email, phone, message, eventId } = req.body;
+  const {
+    name, email, phone, message, eventId,
+    fbp, fbc, userUrl,
+    utm_source, utm_medium, utm_campaign, utm_term, utm_content
+  } = req.body;
 
-  // 1. Log form submission
-  console.log('Received Form Submission:', { name, email, phone, message, eventId });
+  if (!email || !name || !eventId) {
+    return res.status(400).json({ success: false, message: 'Missing required fields.' });
+  }
 
-  // 2. Prepare Meta Conversions API Payload
-  const pixelId = process.env.META_PIXEL_ID;
-  const accessToken = process.env.META_ACCESS_TOKEN;
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
+  const userAgent = req.headers['user-agent'];
 
-  if (pixelId && accessToken) {
-    const metaPayload = {
+  try {
+    const insertQuery = `
+      INSERT INTO leads 
+      (event_id, name, email, phone, message, utm_source, utm_medium, utm_campaign, utm_term, utm_content, fbp, fbc, ip_address, user_agent)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      ON CONFLICT (event_id) DO NOTHING;
+    `;
+    const dbValues = [
+      eventId, name, email, phone, message,
+      utm_source || null, utm_medium || null, utm_campaign || null,
+      utm_term || null, utm_content || null,
+      fbp || null, fbc || null, clientIp, userAgent
+    ];
+    
+    await pool.query(insertQuery, dbValues);
+
+    const hashedEmail = hashData(email);
+    const hashedPhone = hashData(formatPhone(phone));
+    const nameParts = name.trim().split(' ');
+    const hashedFirstName = hashData(nameParts[0]);
+    const hashedLastName = nameParts.length > 1 ? hashData(nameParts.slice(1).join(' ')) : null;
+
+    const capiPayload = {
       data: [
         {
           event_name: 'Lead',
           event_time: Math.floor(Date.now() / 1000),
-          event_id: eventId || `lead_${Date.now()}`,
+          event_id: eventId,
+          event_source_url: userUrl || req.headers.referer,
           action_source: 'website',
           user_data: {
-            em: [hashData(email)],
-            ph: [hashData(phone)],
-            client_ip_address: req.ip,
-            client_user_agent: req.headers['user-agent']
+            em: [hashedEmail],
+            ph: hashedPhone ? [hashedPhone] : [],
+            fn: hashedFirstName ? [hashedFirstName] : [],
+            ln: hashedLastName ? [hashedLastName] : [],
+            client_ip_address: clientIp,
+            client_user_agent: userAgent,
+            fbp: fbp || undefined,
+            fbc: fbc || undefined
           },
           custom_data: {
-            content_name: 'Contact Form Submission'
+            content_name: 'Lead Generation Form',
+            utm_source: utm_source
           }
         }
       ]
     };
 
-    try {
-      await axios.post(
-        `https://graph.facebook.com/v19.0/${pixelId}/events?access_token=${accessToken}`,
-        metaPayload
-      );
-      console.log('Successfully sent Lead event to Meta CAPI');
-    } catch (error) {
-      console.error('Meta CAPI Error:', error.response ? error.response.data : error.message);
-    }
+    const pixelId = process.env.META_PIXEL_ID;
+    const accessToken = process.env.META_ACCESS_TOKEN;
+    const capiUrl = `https://graph.facebook.com/v19.0/${pixelId}/events?access_token=${accessToken}`;
+
+    const capiResponse = await axios.post(capiUrl, capiPayload);
+
+    await pool.query(
+      `UPDATE leads SET meta_capi_status = $1 WHERE event_id = $2`,
+      ['SENT_SUCCESS', eventId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Form submitted successfully!',
+      eventId: eventId,
+      capiEventsReceived: capiResponse.data.events_received
+    });
+
+  } catch (error) {
+    console.error('Submission Error:', error.response?.data || error.message);
+    return res.status(500).json({ success: false, message: 'Internal processing error.' });
   }
-
-  // 3. Send response back to frontend
-  res.json({
-    success: true,
-    message: 'Form submitted successfully!',
-    receivedData: { name, email, phone, message, eventId }
-  });
-});
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
 });
