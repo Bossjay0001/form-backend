@@ -127,3 +127,7 @@ app.post('/submit-form', async (req, res) => {
     return res.status(500).json({ success: false, message: 'Internal processing error.' });
   }
 });
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
