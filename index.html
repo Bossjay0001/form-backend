@@ -72,6 +72,7 @@
     .gallery-info { padding: 1rem; }
     .gallery-info h4 { font-size: 1.1rem; color: var(--primary); }
     .gallery-info p { color: var(--muted); font-size: 0.85rem; }
+    .gallery-info .price { color: var(--accent-hover); font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; }
 
     /* Floating WhatsApp Button */
     .whatsapp-btn { position: fixed; bottom: 25px; right: 25px; background: #25d366; color: white; border-radius: 50px; padding: 0.8rem 1.4rem; font-weight: 700; text-decoration: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 0.5rem; z-index: 1000; transition: transform 0.2s; }
@@ -210,28 +211,30 @@
       </div>
     </div>
 
-    <div class="project-card">
+    <div class="gallery-grid">
       <div class="gallery-item" data-category="media">
-        <img src="asset/media-center-2.jpg" alt="custom media center">
-        <h3>Custom Media Center</h3>
-    <p>Starting from ₦250,000</p>
+        <img src="asset/media-center-2.jpg" alt="Custom Media Center">
+        <div class="gallery-info">
           <h4>Dark Marble & Gold Media Unit</h4>
+          <p class="price">Starting from ₦250,000</p>
           <p>Custom LED-backlit timber console with marble finish accents.</p>
         </div>
       </div>
-      <div class="project-card" data-category="sofa">
+
+      <div class="gallery-item" data-category="sofa">
         <img src="asset/sofa-1.jpg" alt="Custom Sectional Sofa">
-        <div class="project-card">
-        <p>Starting from ₦500,000</p>
+        <div class="gallery-info">
           <h4>Bespoke Velvet Sectional</h4>
+          <p class="price">Starting from ₦500,000</p>
           <p>High-density foam core with reinforced hardwood internal framing.</p>
         </div>
       </div>
-      <div class="project-card" data-category="wardrobe">
+
+      <div class="gallery-item" data-category="wardrobe">
         <img src="asset/wardrobe-1.jpg" alt="Fitted Modern Wardrobe">
-        <div class="project-card">
-          <p>Starting from ₦300,000</p>
+        <div class="gallery-info">
           <h4>Fitted Master Wardrobe</h4>
+          <p class="price">Starting from ₦300,000</p>
           <p>Integrated full-height modular wardrobe with floor-to-ceiling storage.</p>
         </div>
       </div>
@@ -239,7 +242,7 @@
   </section>
 
   <!-- Floating WhatsApp Chat -->
-  <a href="https://wa.me/234902208197?text=Hi%2C%20I%20am%20interested%20in%20your%20services" target="_blank" class="whatsapp-btn">
+  <a href="https://wa.me/2349022084197?text=Hi%2C%20I%20am%20interested%20in%20your%20services" target="_blank" class="whatsapp-btn">
     💬 Chat on WhatsApp
   </a>
 
