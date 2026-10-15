@@ -33,7 +33,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // PostgreSQL Connection
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://furniture_leads_user:nByNTJaXIDN6fwsehmaRUUuebwdg99VJ@dpg-dat7m6l9fdbs7381bbjg-a.oregon-postgres.render.com/furniture_leads',
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
