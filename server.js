@@ -6,6 +6,9 @@ const { Pool } = require('pg');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { Resend } = require('resend');
+const { GoogleGenAI } = require('@google/genai');
+
+const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY.trim() }) : null;
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -162,6 +165,53 @@ app.post('/api/leads', upload.single('referenceImage'), async (req, res) => {
   } catch (error) {
     console.error('❌ Lead processing error:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// AI Interior Design & Pricing Assistant Endpoint
+app.post('/api/chat', async (req, res) => {
+  try {
+    if (!ai) {
+      return res.status(503).json({ reply: 'Our AI assistant is currently offline. Please use the WhatsApp button to chat with us directly!' });
+    }
+
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ reply: 'Please enter a message.' });
+    }
+
+    const systemPrompt = `
+      You are the official AI Interior Design & Pricing Consultant for "BossJay Luxe", a premier custom furniture & interior craftsmanship brand in Nigeria.
+
+      Key Business Information:
+      - Starting Prices:
+        * Custom Media Centers / TV Consoles: Starting from ₦250,000
+        * Fitted Master Wardrobes / Closets: Starting from ₦300,000
+        * Dining Sets & Custom Tables: Starting from ₦350,000
+        * Bespoke Sofas / Sectionals / Lounge: Starting from ₦500,000
+      - Materials Offered: High-grade Egger/MDF boards, natural hardwood (Mahogany, Teak, Oak, Walnut), sintered stone & marble accents, velvet, bouclé, genuine leather, high-density orthopedic foam, and warm LED strip lighting.
+      - Locations & Delivery: Nationwide delivery & installation across Nigeria (including Rivers State / Port Harcourt, Abia, Lagos, Abuja, Delta, Imo, Enugu, etc.).
+      - Production Timeline: Typically 2 to 4 weeks depending on project complexity.
+      - Direct Contact / WhatsApp: +234 902 208 4197
+
+      Instructions:
+      - Keep your answers warm, luxury-toned, helpful, and concise (2 to 4 sentences max).
+      - Always quote realistic price ranges in Naira (₦) based on the starting prices above when asked about cost.
+      - Encourage the client to fill out the "Interactive Quote Builder" on the page or tap the WhatsApp button for final measurements.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: message,
+      config: {
+        systemInstruction: systemPrompt,
+      }
+    });
+
+    res.json({ reply: response.text });
+  } catch (error) {
+    console.error('❌ AI Chat error:', error);
+    res.status(500).json({ reply: 'I encountered a slight hiccup. Feel free to ask again or message us on WhatsApp!' });
   }
 });
 
