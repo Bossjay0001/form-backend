@@ -292,8 +292,19 @@
   </div>
 
   <script>
+    const chatHistory = [];
+
     function toggleAIChat() {
       document.getElementById('aiChatWindow').classList.toggle('open');
+    }
+
+    function formatAIResponse(text) {
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
     }
 
     async function sendAIMessage(e) {
@@ -304,34 +315,37 @@
       const userText = input.value.trim();
       if (!userText) return;
 
-      const userMessage = document.createElement('div');
-      userMessage.className = 'user-msg';
-      userMessage.textContent = userText;
-      messagesDiv.appendChild(userMessage);
-
+      // Show User Message
+      messagesDiv.innerHTML += `<div class="user-msg">${formatAIResponse(userText)}</div>`;
       input.value = '';
       sendBtn.disabled = true;
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
-      const typingMessage = document.createElement('div');
-      typingMessage.className = 'ai-msg';
-      typingMessage.innerHTML = '<em>Thinking...</em>';
-      messagesDiv.appendChild(typingMessage);
+      // Show Typing Indicator
+      const typingId = 'typing-' + Date.now();
+      messagesDiv.innerHTML += `<div class="ai-msg" id="${typingId}"><em>Thinking...</em></div>`;
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
       try {
         const res = await fetch('https://form-backend-5tq6.onrender.com/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: userText })
+          body: JSON.stringify({
+            message: userText,
+            history: chatHistory.slice(-10)
+          })
         });
         const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.reply || 'Failed to get a response.');
+        const reply = data.reply || 'Sorry, please try again.';
+
+        document.getElementById(typingId).innerHTML = formatAIResponse(reply);
+
+        if (res.ok) {
+          chatHistory.push({ role: 'user', text: userText });
+          chatHistory.push({ role: 'ai', text: reply });
         }
-        typingMessage.textContent = data.reply || 'Sorry, please try again.';
       } catch (err) {
-        typingMessage.textContent = 'Connection error. Please try again or chat with us on WhatsApp!';
+        document.getElementById(typingId).innerText = 'Network hiccup. Please try again in a moment!';
       } finally {
         sendBtn.disabled = false;
         messagesDiv.scrollTop = messagesDiv.scrollHeight;

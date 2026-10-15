@@ -168,50 +168,98 @@ app.post('/api/leads', upload.single('referenceImage'), async (req, res) => {
   }
 });
 
-// AI Interior Design & Pricing Assistant Endpoint
+// AI Interior Design & Pricing Assistant Endpoint (With Memory & Auto-Fallback)
 app.post('/api/chat', async (req, res) => {
   try {
     if (!ai) {
       return res.status(503).json({ reply: 'Our AI assistant is currently offline. Please use the WhatsApp button to chat with us directly!' });
     }
 
-    const { message } = req.body;
-    if (!message) {
+    const { message, history = [] } = req.body;
+    if (typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ reply: 'Please enter a message.' });
+    }
+    if (!Array.isArray(history) || history.some(item =>
+      !item || !['user', 'ai'].includes(item.role) || typeof item.text !== 'string'
+    )) {
+      return res.status(400).json({ reply: 'Invalid chat history.' });
     }
 
     const systemPrompt = `
-      You are the official AI Interior Design & Pricing Consultant for "BossJay Luxe", a premier custom furniture & interior craftsmanship brand in Nigeria.
+      You are the Lead AI Interior Design & Pricing Consultant for "BossJay Luxe", a luxury bespoke furniture and interior craftsmanship brand in Nigeria.
 
-      Key Business Information:
-      - Starting Prices:
-        * Custom Media Centers / TV Consoles: Starting from ₦250,000
-        * Fitted Master Wardrobes / Closets: Starting from ₦300,000
-        * Dining Sets & Custom Tables: Starting from ₦350,000
-        * Bespoke Sofas / Sectionals / Lounge: Starting from ₦500,000
-      - Materials Offered: High-grade Egger/MDF boards, natural hardwood (Mahogany, Teak, Oak, Walnut), sintered stone & marble accents, velvet, bouclé, genuine leather, high-density orthopedic foam, and warm LED strip lighting.
-      - Locations & Delivery: Nationwide delivery & installation across Nigeria (including Rivers State / Port Harcourt, Abia, Lagos, Abuja, Delta, Imo, Enugu, etc.).
-      - Production Timeline: Typically 2 to 4 weeks depending on project complexity.
-      - Direct Contact / WhatsApp: +234 902 208 4197
+      DETAILED PRICING & SIZING GUIDE (In Naira ₦):
+      1. Custom Media Centers & TV Consoles:
+         - Compact / Floating Console (4ft - 6ft): ₦250,000 – ₦380,000
+         - Standard Fluted Wall Unit with LED & Marble Board (6ft - 8ft): ₦400,000 – ₦650,000
+         - Grand Floor-to-Ceiling Wall-to-Wall Entertainment Center (8ft - 12ft+): ₦700,000 – ₦1,200,000+
+      2. Fitted Master Wardrobes & Walk-In Closets:
+         - 2-Door / 4ft-6ft Fitted Wardrobe (Egger/MDF board): ₦300,000 – ₦480,000
+         - 3-to-4 Door Floor-to-Ceiling Wardrobe (6ft-8ft with mirrors/LEDs): ₦500,000 – ₦850,000
+         - Luxury Smoked Glass / Aluminum Frame or Walk-In Closet System: ₦900,000 – ₦1,800,000+
+      3. Bespoke Sofas & Lounge Sectionals:
+         - Statement Loveseat / 3-Seater Sofa: ₦500,000 – ₦750,000
+         - L-Shaped Family Sectional (Velvet, Bouclé, or Linen): ₦650,000 – ₦1,100,000
+         - Full U-Shaped Luxury Lounge or Genuine Leather Set: ₦1,200,000 – ₦2,200,000+
+      4. Dining Sets & Custom Tables:
+         - 4-Seater Dining Set: ₦350,000 – ₦500,000
+         - 6-Seater Hardwood or Marble-Top Dining Set: ₦550,000 – ₦950,000
+         - 8-Seater Grand Marble / Sintered Stone Dining Set: ₦1,000,000 – ₦1,800,000+
 
-      Instructions:
-      - Keep your answers warm, luxury-toned, helpful, and concise (2 to 4 sentences max).
-      - Always quote realistic price ranges in Naira (₦) based on the starting prices above when asked about cost.
-      - Encourage the client to fill out the "Interactive Quote Builder" on the page or tap the WhatsApp button for final measurements.
+      MATERIALS & CRAFTSMANSHIP:
+      - Woods & Boards: Seasoned Nigerian Teak, Mahogany, Oak, Walnut, and high-density moisture-resistant Egger/MDF boards.
+      - Fabrics & Foams: High-density orthopedic foam (zero sagging guarantee), stain-resistant velvet, bouclé, suede, and top-grain leather.
+      - Finishes: Sintered stone, Carrara marble slabs, gold brushed stainless steel, tinted glass, and motion-sensor warm LED lighting.
+
+      DELIVERY & TIMELINE:
+      - Production time: 2 to 4 weeks depending on custom specifications.
+      - Nationwide delivery & professional installation across Nigeria (Port Harcourt / Rivers State, Abia, Lagos, Abuja, Enugu, Delta, Imo, Owerri, etc.).
+      - Direct WhatsApp: +234 902 208 4197.
+
+      YOUR PERSONALITY & RULES:
+      - Be conversational, smart, warm, and helpful. Remember what the client said earlier in the chat.
+      - If a user says "Hi" or greets you, welcome them warmly and ask what room or furniture piece they are planning to build.
+      - When they give dimensions (like "6 by 4 feet wardrobe"), calculate a tailored estimate right away based on the pricing guide above and suggest 1 or 2 material options (e.g., matte board vs. sliding mirror doors).
+      - Ask a helpful follow-up question (like their preferred color tone, state for delivery, or if they want LED lighting) to keep the conversation flowing naturally.
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: message,
-      config: {
-        systemInstruction: systemPrompt,
-      }
-    });
+    const conversationContents = [
+      ...history.map(item => ({
+        role: item.role === 'ai' ? 'model' : 'user',
+        parts: [{ text: item.text }]
+      })),
+      { role: 'user', parts: [{ text: message.trim() }] }
+    ];
 
-    res.json({ reply: response.text });
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite'];
+    let replyText = null;
+    let lastError = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: conversationContents,
+          config: {
+            systemInstruction: systemPrompt,
+          }
+        });
+        replyText = response.text;
+        if (replyText) break;
+      } catch (err) {
+        console.warn(`⚠️ Model ${modelName} busy/failed, trying fallback...`, err.status || err.message);
+        lastError = err;
+      }
+    }
+
+    if (!replyText) {
+      throw lastError || new Error('All AI models busy');
+    }
+
+    res.json({ reply: replyText });
   } catch (error) {
     console.error('❌ AI Chat error:', error);
-    res.status(500).json({ reply: 'I encountered a slight hiccup. Feel free to ask again or message us on WhatsApp!' });
+    res.status(500).json({ reply: 'I am experiencing high traffic right now. Please try sending your message again in a few seconds, or tap the WhatsApp button!' });
   }
 });
 
