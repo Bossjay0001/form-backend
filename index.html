@@ -82,6 +82,22 @@
     #formAlert { display: none; padding: 1rem; margin-top: 1rem; border-radius: 6px; font-weight: 600; text-align: center; }
     .alert-success { background: #dcfce7; color: #15803d; }
     .alert-error { background: #fee2e2; color: #b91c1c; }
+
+    /* AI Chat Widget */
+    .ai-chat-toggle { position: fixed; bottom: 85px; right: 25px; background: var(--primary); color: white; border: 2px solid var(--accent); border-radius: 50px; padding: 0.75rem 1.3rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 0.5rem; z-index: 1000; transition: transform 0.2s; font-size: 0.95rem; }
+    .ai-chat-toggle:hover { transform: translateY(-3px); background: #0f172a; }
+    .ai-chat-window { position: fixed; bottom: 145px; right: 25px; width: 340px; max-width: calc(100vw - 40px); height: 440px; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 15px 30px rgba(0,0,0,0.18); display: none; flex-direction: column; overflow: hidden; z-index: 1001; }
+    .ai-chat-window.open { display: flex; }
+    .ai-chat-header { background: var(--primary); color: white; padding: 0.9rem 1rem; display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 0.95rem; border-bottom: 2px solid var(--accent); }
+    .ai-chat-close { background: transparent; border: none; color: white; font-size: 1.2rem; cursor: pointer; }
+    .ai-chat-messages { flex: 1; padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; background: #f8fafc; font-size: 0.9rem; }
+    .ai-msg, .user-msg { max-width: 85%; padding: 0.65rem 0.9rem; border-radius: 10px; line-height: 1.45; word-wrap: break-word; }
+    .ai-msg { background: white; color: var(--text); align-self: flex-start; border: 1px solid var(--border); border-bottom-left-radius: 2px; }
+    .user-msg { background: var(--accent); color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+    .ai-chat-input { display: flex; border-top: 1px solid var(--border); background: white; padding: 0.5rem; gap: 0.4rem; }
+    .ai-chat-input input { flex: 1; border: 1px solid var(--border); border-radius: 6px; padding: 0.55rem 0.75rem; font-size: 0.9rem; outline: none; }
+    .ai-chat-input input:focus { border-color: var(--accent); }
+    .ai-chat-input button { background: var(--accent); color: white; border: none; border-radius: 6px; padding: 0 1rem; font-weight: 600; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -253,6 +269,75 @@
   <a href="https://wa.me/2349022084197?text=Hi%2C%20I%20am%20interested%20in%20your%20services" target="_blank" class="whatsapp-btn">
     💬 Chat on WhatsApp
   </a>
+
+  <!-- Floating AI Assistant Button & Window -->
+  <button class="ai-chat-toggle" onclick="toggleAIChat()">
+    ✨ Ask BossJay AI
+  </button>
+
+  <div class="ai-chat-window" id="aiChatWindow">
+    <div class="ai-chat-header">
+      <span>✨ BossJay Luxe AI Consultant</span>
+      <button class="ai-chat-close" onclick="toggleAIChat()">&times;</button>
+    </div>
+    <div class="ai-chat-messages" id="aiChatMessages">
+      <div class="ai-msg">
+        Hello! Welcome to <strong>BossJay Luxe</strong>. Ask me about furniture pricing, wood/fabric options, or delivery to your state!
+      </div>
+    </div>
+    <form class="ai-chat-input" onsubmit="sendAIMessage(event)">
+      <input type="text" id="aiUserInput" placeholder="e.g., Price for an 8ft TV console?" required>
+      <button type="submit" id="aiSendBtn">Send</button>
+    </form>
+  </div>
+
+  <script>
+    function toggleAIChat() {
+      document.getElementById('aiChatWindow').classList.toggle('open');
+    }
+
+    async function sendAIMessage(e) {
+      e.preventDefault();
+      const input = document.getElementById('aiUserInput');
+      const messagesDiv = document.getElementById('aiChatMessages');
+      const sendBtn = document.getElementById('aiSendBtn');
+      const userText = input.value.trim();
+      if (!userText) return;
+
+      const userMessage = document.createElement('div');
+      userMessage.className = 'user-msg';
+      userMessage.textContent = userText;
+      messagesDiv.appendChild(userMessage);
+
+      input.value = '';
+      sendBtn.disabled = true;
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+      const typingMessage = document.createElement('div');
+      typingMessage.className = 'ai-msg';
+      typingMessage.innerHTML = '<em>Thinking...</em>';
+      messagesDiv.appendChild(typingMessage);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+      try {
+        const res = await fetch('https://form-backend-5tq6.onrender.com/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: userText })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.reply || 'Failed to get a response.');
+        }
+        typingMessage.textContent = data.reply || 'Sorry, please try again.';
+      } catch (err) {
+        typingMessage.textContent = 'Connection error. Please try again or chat with us on WhatsApp!';
+      } finally {
+        sendBtn.disabled = false;
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+    }
+  </script>
 
   <script>
     // Category-specific configurations for Step 2
